@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Convert all files to Unix line endings
+echo "Running dos2unix on all files..."
+find . -type f ! -path "./.git/*" -exec dos2unix {} +
+
+# Run black on all .py files
+echo "Running black on Python files..."
+black .
+
+# Optionally, add checks and exit non-zero to block commit on failure
+# For example:
+if ! git diff --exit-code; then
+  echo "Code was reformatted. Please review and re-stage changes."
+  exit 1
+fi
