@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 
+# Updated remove_bg.py with --save-mask and --mask options
+
 import argparse
 import os
 import glob
+import io
 from pathlib import Path
 from rembg import remove, new_session
 from PIL import Image
 from tqdm import tqdm
 
-# Define shorthand model names
 MODEL_MAP = {
     "u2": "u2net",
     "u2p": "u2netp",
@@ -18,8 +20,20 @@ MODEL_MAP = {
 }
 
 
+def save_mask(image_data, output_path):
+    with Image.open(io.BytesIO(image_data)) as img:
+        alpha = img.getchannel("A")
+        alpha.save(output_path)
+
+
 def process_image(
-    input_path, output_path, model_name, alpha_matting, overwrite=False, dry_run=False
+    input_path,
+    output_path,
+    model_name,
+    alpha_matting,
+    save_mask_flag,
+    overwrite=False,
+    dry_run=False,
 ):
     if output_path.exists() and not overwrite:
         return "skipped"
@@ -31,55 +45,63 @@ def process_image(
         input_data = f.read()
 
     session = new_session(model_name=model_name)
-    output_data = remove(input_data, session=session, alpha_matting=alpha_matting)
+    output_data = remove(
+        input_data,
+        session=session,
+        alpha_matting=alpha_matting,
+        alpha_matting_foreground_threshold=250,
+        alpha_matting_background_threshold=200,
+        alpha_matting_erode_size=2,
+        alpha_matting_base_size=1200,
+    )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "wb") as out:
         out.write(output_data)
+
+    if save_mask_flag:
+        mask_subdir = output_path.parent / "masks"
+        mask_subdir.mkdir(parents=True, exist_ok=True)
+        mask_path = mask_subdir / (output_path.stem + "_mask.png")
+        save_mask(output_data, mask_path)
 
     return "done"
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Batch remove backgrounds from images using rembg with optional model selection and alpha matting."
+        description="Remove backgrounds with rembg, with support for mask export."
     )
     parser.add_argument(
-        "input",
-        type=str,
-        nargs="+",
-        help="Input file(s) or glob patterns (e.g. 'images/*.png')",
+        "input", type=str, nargs="+", help="Input image file(s) or glob patterns"
     )
     parser.add_argument(
         "-o",
         "--output-dir",
         type=str,
         default="output",
-        help="Directory to save output images (default: output)",
+        help="Directory to save output images",
     )
     parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Overwrite existing files in the output directory",
+        "--overwrite", action="store_true", help="Overwrite existing output files"
     )
     parser.add_argument(
-        "-d",
-        "--dry-run",
-        action="store_true",
-        help="List actions without modifying files",
+        "-d", "--dry-run", action="store_true", help="Print actions only"
     )
     parser.add_argument(
         "-m",
         "--model",
         type=str,
         default="u2",
-        help="Model to use: u2, u2p, human, silu, isnet, or 'all' to run all models (default: u2)",
+        help="Model: u2, u2p, human, silu, isnet, or 'all'",
     )
     parser.add_argument(
-        "--alpha-matting",
-        action="store_true",
-        help="Enable alpha matting for better hair/edge quality",
+        "--alpha-matting", action="store_true", help="Enable alpha matting"
     )
+    parser.add_argument(
+        "--save-mask", action="store_true", help="Save alpha mask as separate image"
+    )
+
     args = parser.parse_args()
 
     all_input_files = []
@@ -102,10 +124,6 @@ def main():
             return
         models_to_use = [MODEL_MAP[model_key]]
 
-    print(
-        f"Processing {len(all_input_files)} file(s) with model(s): {', '.join(models_to_use)}\n"
-    )
-
     stats = {model: {"done": 0, "skipped": 0, "dry-run": 0} for model in models_to_use}
 
     for input_file in tqdm(all_input_files, desc="Removing backgrounds", unit="file"):
@@ -117,6 +135,7 @@ def main():
                 output_file,
                 model_name=model,
                 alpha_matting=args.alpha_matting,
+                save_mask_flag=args.save_mask,
                 overwrite=args.overwrite,
                 dry_run=args.dry_run,
             )

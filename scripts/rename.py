@@ -214,9 +214,11 @@ def main():
                 )
 
             if args.replace:
-                stem = simple_replace(stem, *args.replace)
-            if args.regex:
-                stem = regex_replace(stem, *args.regex)
+                stem = (
+                    regex_replace(stem, *args.replace)
+                    if args.regex
+                    else simple_replace(stem, *args.replace)
+                )
 
             new_file = file.with_name(f"{stem}{file.suffix}")
             rename_pairs.append((file, new_file))
