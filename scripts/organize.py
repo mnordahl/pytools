@@ -23,20 +23,20 @@ def is_past_date(name):
         return False
 
 
-def organize_directories(paths, dry_run=False, verbose=False):
+def organize_directories(paths, dry_run=False, silent=False):
     for pattern in paths:
         for path in glob.glob(os.path.expanduser(pattern)):
             p = Path(path)
             if not p.is_dir():
-                if verbose:
+                if not silent:
                     print(f"Skipping (not a dir): {p}")
                 continue
             if not is_valid_date_directory(p.name):
-                if verbose:
+                if not silent:
                     print(f"Skipping (not a valid date): {p}")
                 continue
             if not is_past_date(p.name):
-                if verbose:
+                if not silent:
                     print(f"Skipping (current or future date): {p}")
                 continue
 
@@ -68,7 +68,10 @@ def main():
         help="Show what would happen without moving",
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Print all directory checks"
+        "-s",
+        "--silent",
+        action="store_true",
+        help="Do not print directories being moved",
     )
     parser.add_argument(
         "-y",
@@ -78,7 +81,7 @@ def main():
     )
 
     args = parser.parse_args()
-    organize_directories(args.paths, dry_run=args.dry_run, verbose=args.verbose)
+    organize_directories(args.paths, dry_run=args.dry_run, silent=args.silent)
 
 
 if __name__ == "__main__":
